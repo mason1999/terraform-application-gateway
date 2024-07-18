@@ -1,0 +1,4 @@
+create-table-of-contents.sh
+terraform-docs.yaml
+documentation_configuration/
+override.tf
