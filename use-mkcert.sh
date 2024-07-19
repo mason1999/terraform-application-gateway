@@ -13,7 +13,9 @@ output=false
 output_certificate=""
 key=false
 key_certificate=""
-while getopts 'iurc:d:p:o:k:' option; do 
+cer=false
+cer_certificate=""
+while getopts 'iurc:d:P:O:K:C:' option; do 
     case $option in
         (i) install=true
         ;;
@@ -27,14 +29,17 @@ while getopts 'iurc:d:p:o:k:' option; do
         (d) delete=true
             delete_domain="${OPTARG}"
         ;;
-        (p) pfx=true
+        (P) pfx=true
             pfx_certificate="${OPTARG}"
         ;;
-        (o) output=true
+        (O) output=true
             output_certificate="${OPTARG}"
         ;;
-        (k) key=true
+        (K) key=true
             key_certificate="${OPTARG}"
+        ;;
+        (C) cer=true
+            cer_certificate="${OPTARG}"
         ;;
     esac
 
@@ -57,9 +62,10 @@ usage:
     ./use-mkcert -ir : Install mkcert root authority
     ./use-mkcert -ur : Uninstall mkcert root authority
     ./use-mkcert -c "example.com" : Create public and private certificate for example.com in pem files with default naming.
-    ./use-mkcert -c "example.com" -o "example.com.pem" -k "example.com-key.pem" : Create a public and private certificate with names for the files.
-    ./use-mkcert -c "example.com" -o "example.com.pem" -k "example.com-key.pem" -p : Create a pfx version of the certificate with default naming.
-    ./use-mkcert -c "example.com" -o "example.com.pem" -k "example.com-key.pem" -p "example.com.pfx" : Create a pfx version of the certificate with name for the pfx file.
+    ./use-mkcert -c "example.com" -O "example.com.pem" -K "example.com-key.pem" : Create a public and private certificate with names for the files.
+    ./use-mkcert -c "example.com" -O "example.com.pem" -K "example.com-key.pem" -P : Create a pfx version of the certificate with default naming.
+    ./use-mkcert -c "example.com" -O "example.com.pem" -K "example.com-key.pem" -P "example.com.pfx" : Create a pfx version of the certificate with name for the pfx file.
+    ./use-mkcert -C "root_ca.cer" : Creates a .cer version of the root mkcert CA.
     ./use-mkcert -d "" : Deletes all the pem, crt and pfx files in the directory.
     ./use-mkcert -d "example.com" : Deletes all the pem, crt and pfx files in the directory with name "example.com"
 
@@ -101,36 +107,35 @@ if $uninstall && $root_authority; then
     exit 0
 fi
 
-if ! $install && $root_authority; then 
-    echo -e "\e[92mCopying root certificate to current directory\e[37m"
+if ! $uninstall && ! $install && $root_authority; then 
+    if [[ ! -e "$(mkcert -CAROOT)/rootCA.pem" ]]; then
+        echo -e "\e[91mError: $(mkcert -CAROOT)/rootCA.pem does not exist."
+        exit 1
+    fi 
     rm -f "./rootCA.pem"
-    cp "$(mkcert -CAROOT)/rootCA.pem" .
+    cp "$(mkcert -CAROOT)/rootCA.pem" . &&  echo -e "\e[92mCopied root certificate to current directory\e[37m"
     exit 0
 fi
 
 if $create; then
-    if ! $output; then
-        output_certificate='certfile.pem'
-        echo -e "\e[92mOutput certificate name unspecified. Defaulting to 'certfile.pem'"
-    fi
-    if ! $key; then
-        key_certificate='certfile-key.pem'
-        echo -e "\e[92mKey certificate name unspecified. Defaulting to 'certfile-key.pem'"
-    fi
-
     mkcert -cert-file "${output_certificate}" -key-file "${key_certificate}" "${create_domain}"
 
     if $pfx; then
-        if [[ -z "${pfx_certificate}" ]]; then
-            pfx_certificate='certfile.pfx'
-            echo -e "\e[92mPFX certificate name unspecified. Defaulting to 'certfile.pfx'"
-        fi
         openssl pkcs12 -export -out "${pfx_certificate}" -inkey "${key_certificate}" -in "${output_certificate}"
     fi
     exit 0
 fi
 
+if $cer; then
+    if [[ ! -e "$(mkcert -CAROOT)/rootCA.pem" ]]; then
+        echo -e "\e[91mError: $(mkcert -CAROOT)/rootCA.pem does not exist."
+        exit 1
+    fi 
+    openssl x509 -outform der -in "$(mkcert -CAROOT)/rootCA.pem" -out "${cer_certificate}"
+    exit 0
+fi
+
 if $delete; then
-    rm -f *"${delete_domain}"{.pem,.crt,.pfx}
+    rm -f *"${delete_domain}"{.pem,.crt,.pfx,.cer}
     exit 0
 fi
