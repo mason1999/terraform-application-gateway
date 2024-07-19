@@ -1,7 +1,7 @@
 #! /usr/bin/bash
 
 install=false
-uinstall=false
+uninstall=false
 root_authority=false
 create=false
 create_domain=""
@@ -94,17 +94,17 @@ if $install && $root_authority; then
     exit 0
 fi
 
-if ! $install && $root_authority; then 
-    echo -e "\e[92mCopying root certificate to current directory\e[37m"
-    rm -f "./rootCA.pem"
-    cp "$(mkcert -CAROOT)/rootCA.pem" .
-    exit 0
-fi
-
 if $uninstall && $root_authority; then
     sudo rm -f /usr/local/share/ca-certificates/mkcert*
     sudo update-ca-certificates --fresh
     rm -rf $(mkcert -CAROOT)
+    exit 0
+fi
+
+if ! $install && $root_authority; then 
+    echo -e "\e[92mCopying root certificate to current directory\e[37m"
+    rm -f "./rootCA.pem"
+    cp "$(mkcert -CAROOT)/rootCA.pem" .
     exit 0
 fi
 
