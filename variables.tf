@@ -127,6 +127,53 @@ variable "ssl_certificates" {
   default = null
 }
 
+variable "ssl_profiles" {
+  description = <<EOF
+  (Optional) One or more ssl_profile blocks as defined below. Required if you want to use HTTPS on your listeners.
+
+  name - (Required) The name of the SSL Profile that is unique within this Application Gateway.
+  trusted_client_certificate_names - (Optional) The name of the Trusted Client Certificate that will be used to authenticate requests from clients.
+  verify_client_cert_issuer_dn - (Optional) Should client certificate issuer DN be verified? Defaults to false.
+  verify_client_certificate_revocation - (Optional) Specify the method to check client certificate revocation status. Possible value is OCSP.
+  ssl_policy - (Optional) One ssl_policy block as defined below.
+
+  A ssl_policy block supports the following:
+  cipher_suites - (Optional) A List of accepted cipher suites. Only supported when policy_type is set to Custom. For possible values refer to https://learn.microsoft.com/en-us/rest/api/application-gateway/application-gateways/create-or-update?view=rest-application-gateway-2024-01-01&tabs=HTTP#applicationgatewaysslciphersuite
+  min_protocol_version - (Optional) The minimal TLS version. Possible values are TLSv1_2 and TLSv1_3.
+
+  Note: 
+  EOF
+
+  type = map(object({
+    name                                 = string
+    trusted_client_certificate_names     = optional(list(string), [])
+    verify_client_cert_issuer_dn         = optional(bool, false)
+    verify_client_certificate_revocation = optional(string, null)
+    ssl_policy = object({
+      policy_type          = optional(string, "Custom")
+      cipher_suites        = optional(list(string), ["TLS_RSA_WITH_AES_128_CBC_SHA256"])
+      min_protocol_version = optional(string, "TLSv1_2")
+    })
+  }))
+
+  default = {}
+
+  validation {
+    condition     = alltrue([for _, v in var.ssl_profiles : v.verify_client_certificate_revocation == "OCSP" || v.verify_client_certificate_revocation == null])
+    error_message = "verify_client_certificate_revocation can only be the value OSCP."
+  }
+
+  validation {
+    condition     = alltrue([for _, v in var.ssl_profiles : contains(["Custom", "CustomV2"], v.ssl_policy.policy_type)])
+    error_message = "ssl policy policy type must be one of [Custom, CustomV2]."
+  }
+
+  validation {
+    condition     = alltrue([for _, v in var.ssl_profiles : contains(["TLSv1_2", "TLSv1_3"], v.ssl_policy.min_protocol_version)])
+    error_message = "ssl policy min protocol version must be one of [TLSv1_2, TLSv1_3]."
+  }
+}
+
 variable "http_listeners" {
   description = <<EOF
   (Required) One or more http_listener blocks as defined below:
@@ -138,6 +185,7 @@ variable "http_listeners" {
   host_name - (Optional) The Hostname which should be used for this HTTP Listener. Setting this value changes Listener Type to 'Multi site'. If host_name is set host_names cannot be set.
   host_names - (Optional) A list of Hostname(s) should be used for this HTTP Listener. It allows special wildcard characters. If host_names is set host_name cannot be set
   ssl_certificate_name - (Optional) The name of the associated SSL Certificate which should be used for this HTTP Listener.
+  ssl_profile_name - (Optional) The name of the associated SSL Profile which should be used for this HTTP Listener.
   custom_error_configurations - (Optional) One or more custom_error_configuration blocks as defined below.
 
   A custom_error_configuration block supports the following:
@@ -153,6 +201,7 @@ variable "http_listeners" {
     host_name                   = optional(string, null)
     host_names                  = optional(list(string), null)
     ssl_certificate_name        = optional(string, null)
+    ssl_profile_name            = optional(string, null)
     custom_error_configurations = optional(map(object({
       status_code           = string
       custom_error_page_url = string
@@ -211,21 +260,40 @@ variable "probes" {
   default = {}
 }
 
+variable "trusted_root_certificates" {
+  description = <<EOF
+  (Required) One or more trusted_root_certificate blocks as defined below. Required if want End-to-End TLS encryption. Referenced in backend_http_settings:
+
+  name - (Required) The Name of the Trusted Root Certificate to use.
+  key_vault_secret_id - (Required) The Secret ID of (base-64 encoded unencrypted pfx) Secret or Certificate object stored in Azure KeyVault. You need to enable soft delete for the Key Vault to use this feature. Required if data is not set.
+
+  EOF
+  type = map(object({
+    name                = string
+    key_vault_secret_id = string
+  }))
+
+  default = null
+
+
+}
+
 variable "backend_http_settings" {
   description = <<EOF
   (Required) One or more backend_http_settings blocks as defined below:
 
   name - (Required) The name of the Backend HTTP Settings Collection.
-  cookie_based_affinity - (Required) Is Cookie-Based Affinity enabled? Possible values are Enabled and Disabled.
   port - (Required) The port which should be used for this Backend HTTP Settings Collection.
   protocol - (Required) The Protocol which should be used. Possible values are Http and Https.
 
+  cookie_based_affinity - (Optional) Is Cookie-Based Affinity enabled? Possible values are Enabled and Disabled. Defaults to Disabled.
   probe_name - (Optional) The name of an associated HTTP Probe.
   affinity_cookie_name - (Optional) The name of the affinity cookie.
   path - (Optional) The Path which should be used as a prefix for all HTTP requests.
   request_timeout - (Optional) The request timeout in seconds, which must be between 1 and 86400 seconds. Defaults to 30.
   host_name - (Optional) Host header to be sent to the backend servers. Cannot be set if pick_host_name_from_backend_address is set to true.
   pick_host_name_from_backend_address - (Optional) Whether host header should be picked from the host name of the backend server. Defaults to false.
+  trusted_root_certificate_names - (Optional) A list of trusted_root_certificate names.
   connection_draining - (Optional) A connection_draining block as defined below.
 
   A connection_draining block supports the following.
@@ -235,7 +303,7 @@ variable "backend_http_settings" {
   EOF
   type = map(object({
     name                                = string
-    cookie_based_affinity               = string
+    cookie_based_affinity               = optional(string, "Disabled")
     port                                = number
     protocol                            = string
     probe_name                          = optional(string, null)
@@ -244,6 +312,7 @@ variable "backend_http_settings" {
     request_timeout                     = optional(number, null)
     host_name                           = optional(string, null)
     pick_host_name_from_backend_address = optional(bool, false)
+    trusted_root_certificate_names      = optional(list(string), null)
     connection_draining = optional(object({
       enabled           = bool
       drain_timeout_sec = number

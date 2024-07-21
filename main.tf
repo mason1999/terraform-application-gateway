@@ -90,6 +90,25 @@ resource "azurerm_application_gateway" "this" {
     }
   }
 
+  dynamic "ssl_profile" {
+    for_each = var.ssl_profiles == null ? {} : var.ssl_profiles
+    content {
+      name                                 = ssl_profile.value.name
+      trusted_client_certificate_names     = ssl_profile.value.trusted_client_certificate_names
+      verify_client_cert_issuer_dn         = ssl_profile.value.verify_client_cert_issuer_dn
+      verify_client_certificate_revocation = ssl_profile.value.verify_client_certificate_revocation
+
+      dynamic "ssl_policy" {
+        for_each = ssl_profile.value.ssl_policy[*]
+        content {
+          policy_type          = ssl_policy.value.policy_type
+          cipher_suites        = ssl_policy.value.cipher_suites
+          min_protocol_version = ssl_policy.value.min_protocol_version
+        }
+      }
+    }
+  }
+
   dynamic "http_listener" {
     for_each = var.http_listeners
     content {
@@ -100,6 +119,7 @@ resource "azurerm_application_gateway" "this" {
       host_name                      = http_listener.value.host_name
       host_names                     = http_listener.value.host_names
       ssl_certificate_name           = http_listener.value.ssl_certificate_name
+      ssl_profile_name               = http_listener.value.ssl_profile_name
 
       dynamic "custom_error_configuration" {
         for_each = http_listener.value.custom_error_configurations == null ? {} : http_listener.value.custom_error_configurations
@@ -136,6 +156,14 @@ resource "azurerm_application_gateway" "this" {
     }
   }
 
+  dynamic "trusted_root_certificate" {
+    for_each = var.trusted_root_certificates == null ? {} : var.trusted_root_certificates
+    content {
+      name                = trusted_root_certificate.value.name
+      key_vault_secret_id = trusted_root_certificate.value.key_vault_secret_id
+    }
+  }
+
   dynamic "backend_http_settings" {
     for_each = var.backend_http_settings
     content {
@@ -149,6 +177,7 @@ resource "azurerm_application_gateway" "this" {
       request_timeout                     = backend_http_settings.value.request_timeout
       host_name                           = backend_http_settings.value.host_name
       pick_host_name_from_backend_address = backend_http_settings.value.pick_host_name_from_backend_address
+      trusted_root_certificate_names      = backend_http_settings.value.trusted_root_certificate_names
       dynamic "connection_draining" {
         for_each = backend_http_settings.value.connection_draining[*]
         content {
@@ -182,7 +211,6 @@ resource "azurerm_application_gateway" "this" {
 
   }
 
-  # TODO: WRITING THIS
   dynamic "rewrite_rule_set" {
     for_each = var.rewrite_rule_sets
     content {
@@ -264,6 +292,7 @@ resource "azurerm_application_gateway" "this" {
       url_path_map_name           = request_routing_rule.value.url_path_map_name
     }
   }
+
   dynamic "custom_error_configuration" {
     for_each = var.custom_error_configurations == null ? {} : var.custom_error_configurations
     content {

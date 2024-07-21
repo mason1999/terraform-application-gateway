@@ -13,8 +13,8 @@ output=false
 output_certificate=""
 key=false
 key_certificate=""
-cer=false
-cer_certificate=""
+ca=false
+ca_certificate=""
 while getopts 'iurc:d:P:O:K:C:' option; do 
     case $option in
         (i) install=true
@@ -38,8 +38,8 @@ while getopts 'iurc:d:P:O:K:C:' option; do
         (K) key=true
             key_certificate="${OPTARG}"
         ;;
-        (C) cer=true
-            cer_certificate="${OPTARG}"
+        (C) ca=true
+            ca_certificate="${OPTARG}"
         ;;
     esac
 
@@ -126,12 +126,17 @@ if $create; then
     exit 0
 fi
 
-if $cer; then
+if $ca; then
     if [[ ! -e "$(mkcert -CAROOT)/rootCA.pem" ]]; then
         echo -e "\e[91mError: $(mkcert -CAROOT)/rootCA.pem does not exist."
         exit 1
     fi 
-    openssl x509 -outform der -in "$(mkcert -CAROOT)/rootCA.pem" -out "${cer_certificate}"
+
+    if [[ ! -e "$(mkcert -CAROOT)/rootCA-key.pem" ]]; then
+        echo -e "\e[91mError: $(mkcert -CAROOT)/rootCA.pem does not exist."
+        exit 1
+    fi 
+    openssl pkcs12 -export -out "${ca_certificate}" -inkey "$(mkcert -CAROOT)/rootCA-key.pem" -in "$(mkcert -CAROOT)/rootCA.pem"
     exit 0
 fi
 
