@@ -14,11 +14,11 @@ sections:
   hide: []
   show: []
 
-# {{ include "./documentation_configuration/overview.md" }}
-
 content: |-
 
   {{ .Header }}
+
+  {{ include "./documentation_configuration/overview.md" }}
 
   {{ .Providers }}
 
